@@ -4,11 +4,12 @@ type: comparison
 updated: "2026-03-22"
 topics:
   - Enzyme-Substrate-Alignment
+  - Molecular Representation Learning
 papers:
   - DrugCLIP
   - EnzymeCAGE
 tags:
-status: 
+status: open
 related:
 ---
 
@@ -23,6 +24,13 @@ related:
 | Direction awareness | ❌          | ✅                    | ✅ (via coords)          |
 | Complexity          | Low        | Medium                 | Medium                  |
 | Interpretability    | Low        | Medium (vectors)       | Medium (coords)         |
+
+
+## Usage Across Papers
+
+**SchNet** - EnzymeCAGE
+**GVP** - EnzymeCAGE
+**EGNN** - CLIPZyme
 
 ## Core conceptual difference
 
@@ -46,7 +54,7 @@ related:
 
 👉 “direction comes from positions”
 
-## Strengths & weaknesses
+## Strengths & Weaknesses
 
 **SchNet**:
 - Simple

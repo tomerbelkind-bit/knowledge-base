@@ -1,7 +1,7 @@
 ---
 title: "EnzymeCAGE - summary"
 type: paper-summary
-updated: "2026-03-21"
+updated: "2026-03-22"
 topics:
   - Enzyme-Substrate-Alignment
 papers:
@@ -76,15 +76,100 @@ To identify reaction center, we employed RXNMapper to generate atom-atom mapping
 
 ## Model and Architecture
 
-### Enzyme Representation
+### Enzyme representation
 
-EnzymeCAGE uses **GVP** to encode pocket graphs
+EnzymeCAGE uses **GVP** to encode pocket graphs due to its computational efficiency.
+
+EnzymeCAGE uses ESM2 to capture global features at the full-enzyme scale.
+
+### Identify reaction center
+
+#### Key Insight for identifying reaction center
+
+There is no learning for identifying the reaction center, and this is actually a **design choise**:
+- Injects domain knowledge about chemical reactions
+- Focuses the model on chemically relevant atoms
+- Reduces the burden on the model to infer reaction centers
+- Trades off end-to-end learning for inductive bias
+
+#### Input representation (2D)
+
+Each molecule is represented as a graph with:
+- Atoms (nodes):
+   - Element type (C, N, O, …)
+   - Formal charge
+   - Chirality
+   - Valence
+- Bonds (edges):
+   - bond type (single, double, aromatic, etc.)
+
+These typically come from:
+- SMILES / reaction SMILES
+- Parsed using chemistry tools like RDKit
+
+To compare substrate ↔ product, the model needs:
+Atom mapping — which atom in the substrate corresponds to which atom in the product
+
+This usually comes from:
+- Reaction datasets (e.g., USPTO)
+- or computed via atom-mapping algorithms
+
+#### Atom mapping 
+
+To compare substrate ↔ product:
+- Atom mapping identifies correspondence between atoms. 
+- Comes from:
+    - Reaction datasets (e.g., USPTO)
+    - or atom-mapping algorithms
+
+#### Identify reaction center
+
+“atoms that undergo changes in bonding, charge, or chirality”
+
+Reaction center identification relies on **2D graph information**, not on 3D geometry.
+
+Inputs:
+- Substrate graph
+- Product graph
+- Atom mapping
+
+Method:
+- Graph comparison (rule-based)
+- Detect:
+   - Bond changes (formed/broken)
+   - Bond order changes 
+   - Charge changes
+   - Chirality changes
+
+#### Assign weights
+
+- Atoms in reaction center → higher weights
+- Others → lower weights
+
+Manually defined heuristic / preprocessing
+
+#### Generate 3D conformations
+
+- Substrate & product conformations are computed (e.g., RDKit)
+
+### Substrate and product representation
+
+EnzymeCAGE uses **SchNet** to separately encode substrate and product conformations, providing an effective representation of reaction dynamics.
+
+- It computes substrate and product conformations.
+- It identifies the reaction center by pinpointing atoms that undergo changes in bonding, charge, or chirality during catalysis.
+- Different weights are then assigned to atoms within the reacting area, with higher weights for atoms located in the reaction center.
+
 
 ## Algorithms EzymeCAVE Relies on
 
 ### GVP
 
+Is used to encode pocket graphs
+
 ### SchNet
+
+SchNet is used to separately encode substrate and product conformations, providing an effective representation of reaction dynamics
 
 ![](images/1774041357666.png)
 
@@ -150,3 +235,30 @@ For reaction encoding, we calculate a reacting area weight matrix as a form of g
 
 ### Predicting the location of active sites
 Although EnzymeCAGE primarily focuses on enzyme retrieval and func tion prediction by predicting enzyme-reaction interactions, the model also provides interpretability in its predictions. When using the geometric cross373 attention model to learn the interaction between enzyme and reaction, we extract attention weights and use them to identify active sites. In many enzymes, this method accurately predicts the location of active sites. However, a current limitation is that we can only identify active sites located within the enzyme pocket as estimated by AlphaFill, while in reality, some active sites may lie outside the pocket but are involved in catalysis
+
+## My Comments and Questions
+
+### Why not using GVP to represnt substrates and products
+
+Substrates and products are much small molecules comparing to proteins.
+For proteins, structure ≈ one meaningful fold
+For small molecules - many valid conformations
+
+Proteins: Need geometry → 3D-aware
+
+Small molecues: Chemistry is mostly about bond types, functional groups, connectivity
+
+GVP:
+- Assumes a meaningful, stable 3D geometry, and the 3D conformations of small molecules are noisy, not unique (many conformers), and sometime unavailable.
+- Is computationally heavier
+- Uses vector features (more memory, more compute)
+
+But EnyzmeCAGE needs:
+- Large-scale retrieval
+- Fast embedding of many molecules
+
+### Identifying the reaction center
+
+There is no learning for identifying the reaction center, and this is actually a **design choise**
+
+

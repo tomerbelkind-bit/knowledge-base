@@ -4,6 +4,7 @@ type: paper-summary
 updated: "2026-03-22"
 topics:
   - Enzyme-Substrate-Alignment
+  - Molecular Representation Learning
 papers:
   - SchNet
 tags:

@@ -1,5 +1,5 @@
 ---
-title: "ReactZyme-summary"
+title: "ReactZyme - Summary"
 type: paper-summary
 updated: "2026-03-16"
 topics:
@@ -7,7 +7,7 @@ topics:
 papers:
   - ReactZyme
 tags:
-status: 
+status: open
 related:
 ---
 

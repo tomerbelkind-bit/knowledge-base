@@ -4,6 +4,7 @@ type: paper-deep-dive
 updated: "2026-03-21"
 topics:
   - Enzyme-Substrate-Alignment
+  - Molecular Representation Learning
 papers:
   - GVP
 tags:
