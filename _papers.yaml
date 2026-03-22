@@ -1,0 +1,30 @@
+- name: 'CLIPZyme: Reaction-Conditioned Virtual Screening of Enzymes'
+  shortName: CLIPZyme
+  publicationDate: '2024'
+- name: 'DrugCLIP: Contrastive Protein-Molecule Representation Learning for Virtual Screening'
+  shortName: DrugCLIP
+  publicationDate: '2023-10-10'
+- name: Dual-encoder contrastive learning accelerates enzyme discovery
+  shortName: Dual-encoder
+  publicationDate: '2025'
+- name: 'EnzymeCAGE: A Geometric Foundation Model for Enzyme 2 Retrieval with Evolutionary Insights'
+  shortName: EnzymeCAGE
+  publicationDate: '2024'
+  citedPapers:
+    - SchNet
+    - GVP
+- name: A benchmark for enzyme-reaction prediction
+  shortName: ReactZyme
+  publicationDate: '2024'
+- name: 'Uni-Mol: A Universal 3D Molecular Representation'
+  shortName: Uni-Mol
+  publicationDate: '2023-03-01'
+- name: 'SchNet: A continuous-filter convolutional neural network for modeling quantum interactions'
+  shortName: SchNet
+  publicationDate: '2017-06-26'
+  url: https://arxiv.org/abs/1706.08566
+- name: Learning from Protein Structure with Geometric Vector Perceptrons
+  shortName: GVP
+  publicationDate: '2020-09-03'
+  url: https://arxiv.org/abs/2009.01411
+  code: https://github.com/drorlab/gvp
