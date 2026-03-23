@@ -67,9 +67,11 @@ For the test set Orphan-194, we first filtered the full dataset to retain only r
 **Loyal 1968**
 For the Loyal-1968 test set, we identified non-promiscuous enzymes that have been reported to catalyze only a single reaction. Using MMseqs2 with a cutoff of 0.4, we retrieved homologous proteins as negative samples. This set was curated to include reactions with: (1) at least one non-promiscuous enzyme as a positive example, (2) each non-promiscuous enzyme having over 10 homologous proteins, and (3) a ratio of homologous to non-promiscuous enzymes of at least 3:1. These criteria ensure functional diversity and exclude positive enzymes present in the training data. The final Loyal-1968 test set consists of 455 reactions with a total of 71,853 enzyme-reaction pairs, covering 1,968 enzymes across 77 unique top-three-level EC numbers.
 
-## Catalytic Pocket and Reaction Center Extraction
+## Pre-processing
 
-To generate catalytic pocket data, we downloaded AlphaFold structures for all enzymes and applied AlphaFill [44] to extract the enzyme pockets. For identifying reaction center, we used atom-atom mapping of the reactions. In the pocket extraction process, AlphaFill first identified homologous proteins of the tar4get enzyme in the PDB-REDO database [63] and located their protein-ligand complexes.
+### Catalytic Pocket and Reaction Center Extraction
+
+To generate catalytic pocket data, we downloaded AlphaFold structures for all enzymes and applied AlphaFill to extract the enzyme pockets. For identifying reaction center, we used atom-atom mapping of the reactions. In the pocket extraction process, AlphaFill first identified homologous proteins of the tar4get enzyme in the PDB-REDO database and located their protein-ligand complexes.
 
 Ligands from these homologous complexes were then transplanted onto the target enzyme structure through structural alignment.
 
@@ -79,67 +81,12 @@ A clustering analysis on the extracted pockets using Foldseek [64] showed that c
 
 To identify reaction center, we employed RXNMapper to generate atom-atom mappings between substrates and products. Using this mapping, we identified atoms involved in bond changes, charge shifts, and chirality alterations, marking these as the reaction center for the catalyzed transformation.
 
-## Model and Architecture
+### Reaction Center Identification (Substrate/Product)
 
-### Steps Summary
+**Input**: atom types, 2D graph, atom features (format charge, valence, etc.) 
+**Output**: reaction center weights / mask
 
-- Geometry-enhanced Pocket Attention Module (Enzyme)
-- Identify reaction center.
-- Identify reaction center (Substrate / Product).
-- Center-aware Reaction Interaction Module (Substrate / Product).
-- Geometry-enhanced Interaction Module
-- Global Feature Integration
-
-### Geometry-enhanced Pocket Attention Module (Enzyme)
-
-**Input**: residue types, residue positions, dihedral angles, orientations, side-chain information, relative positional vectors and RBF-encoded distances.
-**Output**: $f^e$ - a set of contextualized, geometry-aware residue embeddings for the protein, capturing both local 3D structure (via GVP) and global relationships (via self-attention).
-
-  <bp>
-  <bp>
-
-This module facilitates interaction between residues within the catalytic pocket by representing the pocket as a graph $G_e = (V_e, E_e)$
-
-$V_e$ - denotes node features such as residue types, residue positions, dihedral angles, orientations, and side-chain information.
-$E_e$ - represents edge features, including relative positional vectors and RBF-encoded distances.
-
-To further refine residue relationships, a residue-level distance map $D_m = \{ d_{ij} \mid i, j \in V \}$ is constructed, where $d_{ij}$ represents the distance between residues $i$ and $j$.
-
-Using this distance map, a geometry-enhanced attention mechanism captures local interactions within the pocket:
-
-<center>$f^e = \mathrm{SelfAttention}\left( \mathrm{GVP}(V_e, E_e), D_m \right)$</center> <br>
-
-Here, a multi-head self-attention model is applied, with the distance map $D_m$ serving as an attention bias to enhance the model’s understanding of relative positional relationships among residues. The resulting output, $f^e$, encodes the local geometric and biochemical information of the catalytic pocket.
-
-The multi-head self-attention is applied over the residue-level node embeddings output by the GVP encoder.
-
-For each residue $i$:
-<center>$h_i^{\mathrm{protein}} \in \mathbb{R}^{d}$</center>
-
-Each embedding encodes:
-- Local geometry (from GVP)
-   - Spatial arrangement of neighboring residues
-   - Orientations / structural motifs
-   - Backbone geometry
-- Global context (from attention)
-   - Long-range interactions
-   - Relationships between distant residues
-   - Overall fold context
-- Functional hints (implicitly learned) - Even though no reaction info is used:
-   - Active site patterns
-   - Binding pocket geometry
-   - Structural motifs
-
-Note: no reaction-center information is used at this stage.
-
-{frame: The output of this stage is a set of contextualized, geometry-aware residue embeddings for the protein, capturing both local 3D structure (via GVP) and global relationships (via self-attention).} 
-
-### Identify reaction center (Substrate / Product)
-
-**Input**: Atom types, 3D coordinates, atom features (format charge, valence, etc.), reaction center weights 
-**Output**: substrate and product conformations
-
-#### Key Insight for identifying reaction center
+#### Key insight for identifying reaction center
 
 There is no learning for identifying the reaction center, and this is actually a **design choise**:
 - Injects domain knowledge about chemical reactions
@@ -182,19 +129,68 @@ Reaction center identification relies on **2D graph information**, not on 3D geo
 
 Manually defined heuristic / preprocessing
 
-#### Generate 3D conformations
+## Model and Architecture
+
+### Model Overview
+
+- Protein Pocket Encoder (Enzyme ; GVP + Self-Attention)
+- 3D conformer generation (Substrate / Product)
+- Reaction Encoder (Substrate/Product ; SchNet + Reaction Center Weighting)
+- Enzyme-Reaction Interaction Module
+- Final Prediction Module (Global Integration)
+
+### Protein Pocket Encoder (Enzyme ; GVP + Self-Attention)
+
+**Input**: pocket residues, residue types, residue positions, dihedral angles, orientations, side-chain information, relative positional vectors and RBF-encoded distances.
+**Output**: $f^e$ - a set of contextualized, geometry-aware residue embeddings for the protein, capturing both local 3D structure (via GVP) and global relationships (via self-attention).
+
+  <bp>
+  <bp>
+
+This module models interactions within a predefined candidate pocket region by representing the pocket as a graph $G_e = (V_e, E_e)$ <br>
+
+#### Multi-head self attention
+
+A multi-head self-attention model is applied, with the distance map $D_m$ serving as an attention bias to enhance the model’s understanding of relative positional relationships among residues:
+
+<center>$f^e = \mathrm{SelfAttention}\left( \mathrm{GVP}(V_e, E_e), D_m \right)$</center> <br>
+
+$V_e$ - denotes node features such as residue types, residue positions, dihedral angles, orientations, and side-chain information.
+
+$E_e$ - represents edge features, including relative positional vectors and RBF-encoded distances. 
+
+$D_m = \{ d_{ij} \mid i, j \in V \}$ - a residue-level distance map to further refine residue relationships. $d_{ij}$ represents the distance between residues $i$ and $j$.
+
+The multi-head self-attention is applied over the residue-level node embeddings output by the GVP encoder.
+The resulting output, $f^e$, encodes the local geometric and biochemical information of the catalytic pocket.
+
+#### GVP embeddings
+
+For each residue $i$:
+<center>$h_i^{\mathrm{protein}} \in \mathbb{R}^{d}, \quad f^e = \{ h_i^{\mathrm{protein}} \}_{i=1}^{N}$</center> <br>
+
+Each embedding encodes:
+- Local geometry (from GVP): Spatial arrangement of neighboring residues, orientations / structural motifs, backbone geometry
+- Global context (from attention): Long-range interactions, relationships between distant residues, overall fold context
+- Functional hints (implicitly learned) - Even though no reaction info is used: Active site patterns, binding pocket geometry, structural motifs
+
+### 3D Conformer Generation
+
+**Input**: Atom types, bond connectivity, bond type (single, double, aromatic,...). Usually using SMILES or reaction SMILES.
+**Output**: substrate and product conformations
 
 - Substrate & product conformations are computed (e.g., RDKit)
 
-### Center-aware Reaction Interaction Module (Substrate / Product)
+### Reaction Encoder (Substrate/Product ; SchNet + Reaction Center Weighting)
 
-**Input**: Atom types, 3D coordinates, atom features (format charge, valence, etc.), reaction center weights 
-**Output**: Atom-level embeddings
+**Input**: Atom types, 3D coordinates, atom features (formal charge, valence, etc.), reaction center weights 
+**Output**: $f_r$ - Atom-level embeddings capturing the full reaction context
 
-This module captures the dynamic transformations between substrate and product molecules in a reaction, generating a comprehensive reaction representation.
+This module captures relationships between substrate and product representations in a reaction, generating a comprehensive reaction representation.
+It tries to capture dynamic transformations between substrate and product molecules.
 It relies on the reaction center information.
 Reaction center step: “These atoms matter”
-SchNet: “Let me understand their 3D environment”
+SchNet encodes the 3D local chemical environment of atoms
 
 EnzymeCAGE uses **SchNet** to separately encode substrate and product conformations, providing an effective representation of reaction dynamics.
 SchNet is used to convert 3D substrate and product structures into atom-level embeddings, guided by reaction-center weights.
@@ -203,16 +199,14 @@ SchNet is good at:
 - Capturing local atomic environments
 - Modeling interatomic distances
 
+#### Calculate reacting area weight matrix
+
 First, for each molecule (either substrate or product), we define a set $C$ of indices corresponding to atoms at the reaction center. $C$ holds the reaction center information.
 We then create a vector $R$ to indicate these centers and calculate a reacting area weight matrix as follows
 
-$R = (r_1, r_2, \ldots, r_M), \quad \text{where } r_i =
-\begin{cases}
-1, & \text{if } i \in C \\
-0, & \text{if } i \notin C
-\end{cases}$
+<center>$R = (r_1, r_2, \ldots, r_M), \quad \text{where } r_i = \begin{cases} 1, & \text{if } i \in C \\ 0, & \text{if } i \notin C \end{cases}$</center> <br>
 
-$W_r = R_s \otimes R_p$
+<center>$W_r = R_s \otimes R_p$</center> <br>
 
 $r_i$ - represents an element of the vector $R$, and $M$ is the total number of atoms in the molecule.
 
@@ -220,25 +214,32 @@ $R_s$ and $R_p$ - denote the reaction center of the substrate and product, respe
 
 $W_r$ - the reacting area weight matrix for the reaction.
 
+#### Encode sbstrate and product graphs
+
 The substrate and product conformations are represented as graphs, $G_s = (V_s, E_s)$ and $G_p = (V_p, E_p)$, respectively, where each node represents an atom with features like atom type and position, and each edge represents a bond between atoms.
 
 A 3D molecular GNN, specifically SchNet, encodes these substrate and product graphs:
 
 <center>$f^s = \text{SchNet}(V_s, E_s)$  ;   $f^p = \text{SchNet}(V_p, E_p)$</center> <br>
 
+#### Interaction module based on cross-attention
+
 Using the molecular embeddings $f_s$ and $f_p$, and the reacting area weight matrix $W_r$, we build an interaction module based on cross-attention:
 
 <center>$f^r = \text{CrossAttention}(f^s, f^p, W_r)$</center> <br>
 
-$W_r$ - acts as an attention bias, guiding the model to focus effectively on the reaction center.
+$W_r$ - acts as an attention bias, guiding the model to focus effectively on the reaction center. It biases attention toward reaction-relevant atoms.
 
-{frame: The resulting output, $f_r$, represents the complete reaction}
+### Enzyme-Reaction Interaction Module
 
-### Geometry-enhanced Interaction Module
+**Input**: $f^e$, $f^r$, $R_s$
+**Output**: $z$ - the final embedding produced by the Geometry-enhanced Interaction Module, capturing the interaction between the catalytic pocket and the chemical reaction
 
 This module models the interactions between the catalytic pocket and the chemical reaction, employing geometric guidance to determine enzyme reaction interaction weights. 
 
-We calculate a conservation score for each residue in the catalytic pocket based on its proximity to the pocket center, approximating the active site:
+#### Calculate a distance-based geometric importance score
+
+We calculate a distance-based geometric importance score for each residue in the catalytic pocket based on its proximity to the pocket center, approximating the active site:
 (Note: this step doesn't use any information related to the substrates and products)
 
 <center>$X_{\text{center}} = \frac{1}{N} \sum_{i=1}^{N} x_i$</center> <br>
@@ -253,33 +254,34 @@ $x_i$ - represents the 3D coordinate (position) of residue $i$  in the catalyti
 
 $N$ - denotes the number of residues in the catalytic pocket.
 
-$S_c$ - the conservation score vector, where residues closer to the pocket center receive higher scores.
+$S_c$ - the distance-based geometric importance score, where residues closer to the pocket center receive higher scores.
 
----
+#### Compute enzyme-reaction interaction weight matrix
 
-Next, we compute the enzyme-reaction interaction weight matrix by combining the pocket conservation scores with the reaction center weights of the substrate:
+Next, we compute the enzyme-reaction interaction weight matrix by combining the pocket distance-based geometric importance scores with the reaction center weights of the substrate:
 
 <center>$W_I = S_c \otimes R_s$</center> <br>
 
 <center>$W_I \in \mathbb{R}^{N \times M}$</center> <br>
 
-<center>$W_I[i, j] = s_i \cdot r_j$</center>
+<center>$W_I[i, j] = s_i \cdot r_j = \begin{cases} 0, & \text{if }r_j=0  \\ s_i, & \text{if } r_j=1 \end{cases}$</center> <br>
 
-$S_c$ - weights for N residues (enzyme)
+
+$S_c$ - weights for N residues (enzyme).
 
 $R_s$ - weights for M atoms (substrate/product). Was calculated in the previous section.
 
-$W_I$ denotes the enzyme-reaction interaction weight matrix, which is used as a geometric guidance in the cross-attention model to enhance the enzyme-reaction interaction:
+$W_I$ - denotes the enzyme-reaction interaction weight matrix.
+
+#### Cross-attention to enhance the enzyme-reaction interaction
+
+Using $W_I$ as a geometric guidance in the cross-attention model to enhance the enzyme-reaction interaction:
 
 <center>$z = \mathrm{\text{CrossAttention}}(f^e, f^r, W_I)$</center> <br>
 
 $f_e$ and $f_r$ - represent the feature embeddings of the catalytic pocket and the reaction, respectively.
 
-$W_I$ - provides the interaction weights based on geometric guidance
-
-{frame:The output $z$ is the final embedding produced by the Geometry-enhanced Interaction Module, capturing the interaction between the catalytic pocket and the chemical reaction}
-
-### Global Feature Integration
+### Final Prediction Module (Global Integration)
 
 **Input**: $z$, $f_{esm}$ (from ESM2), $f_{DRFP}$
 **Output**: $p$ - the probability that the input enzyme can catalyze its associated given reaction. 
@@ -293,6 +295,25 @@ The global enzyme representation $f_{esm}$ and the reaction fingerprint $f_{DRFP
 <center>$p = \mathrm{Sigmoid}\left( \mathrm{MLP}\left( \mathrm{concat}\left( f_{\mathrm{esm}}, f_{\mathrm{DRFP}}, \mathrm{mean}(z) \right) \right) \right)$</center> <br>
 
 The final prediction $p$ represents the probability that the input enzyme can catalyze its associated given reaction, offering a quantitative measure of catalytic specificity.
+
+### Key Design Pattern
+
+The model follows a hybrid design:
+
+- Explicit priors:
+  - reaction center (molecule side)
+  - pocket center (enzyme side)
+
+- Learned representations:
+  - SchNet (molecules)
+  - GVP + attention (protein)
+
+- Learned interaction:
+  - cross-attention
+
+This separates:
+- "where to look" (priors)
+- "how to reason" (neural networks)
 
 ## Fine-tuning
 
@@ -360,5 +381,14 @@ But EnzymeCAGE needs:
 ### Identifying the reaction center
 
 There is no learning for identifying the reaction center, and this is actually a **design choise**
+
+### local interaction model + global priors
+
+Local: 
+- pocket ↔ reaction interaction (z)
+
+Global: 
+- ESM2 (enzyme)
+- DRFP (reaction)
 
 
