@@ -1,7 +1,7 @@
 ---
-title: "EnzymeCAGE - summary"
+title: "EnzymeCAGE - Summary"
 type: paper-summary
-updated: "2026-03-23"
+updated: "2026-03-24"
 topics:
   - Enzyme-Substrate-Alignment
 papers:
@@ -38,7 +38,7 @@ MetaCyc
 
 Constructed a dataset comprising over 914,077 enzyme-reaction pairs
 
-### Data cleaning 
+### Data Cleaning
 
 Optimizind the data by removing invalid entries and standardizing formats.
 Specifically, enzyme entries without UniProt ID or sequence data were excluded.
@@ -69,7 +69,7 @@ For the Loyal-1968 test set, we identified non-promiscuous enzymes that have bee
 
 ## Pre-processing
 
-### Catalytic Pocket and Reaction Center Extraction
+### Catalytic Pocket Extraction
 
 To generate catalytic pocket data, we downloaded AlphaFold structures for all enzymes and applied AlphaFill to extract the enzyme pockets. For identifying reaction center, we used atom-atom mapping of the reactions. In the pocket extraction process, AlphaFill first identified homologous proteins of the tar4get enzyme in the PDB-REDO database and located their protein-ligand complexes.
 
@@ -77,71 +77,25 @@ Ligands from these homologous complexes were then transplanted onto the target e
 
 Following ligand transplantation, we selected ligands based on their atomic count and occurrence frequency and defined the catalytic pocket using an 8 ˚A radius around each ligand.
 
-A clustering analysis on the extracted pockets using Foldseek [64] showed that catalytic pockets have higher functional relevance than entire enzyme structures, supporting the focus on the pocket-level analysis and modeling.
+A clustering analysis on the extracted pockets using Foldseek showed that catalytic pockets have higher functional relevance than entire enzyme structures, supporting the focus on the pocket-level analysis and modeling.
+
+### Reaction Center Extraction
 
 To identify reaction center, we employed RXNMapper to generate atom-atom mappings between substrates and products. Using this mapping, we identified atoms involved in bond changes, charge shifts, and chirality alterations, marking these as the reaction center for the catalyzed transformation.
-
-### Reaction Center Identification (Substrate/Product)
-
-**Input**: atom types, 2D graph, atom features (format charge, valence, etc.) 
-**Output**: reaction center weights / mask
-
-#### Key insight for identifying reaction center
-
-There is no learning for identifying the reaction center, and this is actually a **design choise**:
-- Injects domain knowledge about chemical reactions
-- Focuses the model on chemically relevant atoms
-- Reduces the burden on the model to infer reaction centers
-- Trades off end-to-end learning for inductive bias
-
-#### Molecule representation (2D)
-
-Each molecule is represented as a graph with:
-- Atoms (nodes): element type (C, N, O, …), formal charge, chirality, valence
-- Bonds (edges): bond type (single, double, aromatic, etc.)
-
-These typically come from:
-- SMILES / reaction SMILES
-- Parsed using chemistry tools like RDKit
-
-#### Atom mapping 
-
-To compare substrate ↔ product, the model needs atom mapping - which atom in the substrate corresponds to which atom in the product.
-This usually comes from:
-- Reaction datasets (e.g., USPTO)
-- or atom-mapping algorithms
-
-#### Identify reaction center
-
-Inputs: substrate graph, product graph, atom mapping
-Output: atoms that undergo changes in bonding, charge, or chirality
-
-Method:
-- Graph comparison (rule-based)
-- Detect: bond changes (formed/broken), bond order changes, charge changes, chirality changes
-
-Reaction center identification relies on **2D graph information**, not on 3D geometry.
-
-#### Assign weights
-
-- Atoms in reaction center → higher weights
-- Others → lower weights
-
-Manually defined heuristic / preprocessing
 
 ## Model and Architecture
 
 ### Model Overview
 
-- Protein Pocket Encoder (Enzyme ; GVP + Self-Attention)
-- 3D conformer generation (Substrate / Product)
-- Reaction Encoder (Substrate/Product ; SchNet + Reaction Center Weighting)
+- Protein Pocket Encoder (GVP + Self-Attention)
+- 3D Conformer Generation
+- Reaction Encoder (SchNet + Reaction Center Weighting)
 - Enzyme-Reaction Interaction Module
 - Final Prediction Module (Global Integration)
 
-### Protein Pocket Encoder (Enzyme ; GVP + Self-Attention)
+### Protein Pocket Encoder (GVP + Self-Attention)
 
-**Input**: pocket residues, residue types, residue positions, dihedral angles, orientations, side-chain information, relative positional vectors and RBF-encoded distances.
+**Input**: enzyme pocket residues, residue types, residue positions, dihedral angles, orientations, side-chain information, relative positional vectors and RBF-encoded distances.
 **Output**: $f^e$ - a set of contextualized, geometry-aware residue embeddings for the protein, capturing both local 3D structure (via GVP) and global relationships (via self-attention).
 
   <bp>
@@ -176,14 +130,14 @@ Each embedding encodes:
 
 ### 3D Conformer Generation
 
-**Input**: Atom types, bond connectivity, bond type (single, double, aromatic,...). Usually using SMILES or reaction SMILES.
+**Input**: substrate and product atom information - atom types, bond connectivity, bond type (single, double, aromatic,...). Usually using SMILES or reaction SMILES.
 **Output**: substrate and product conformations
 
 - Substrate & product conformations are computed (e.g., RDKit)
 
-### Reaction Encoder (Substrate/Product ; SchNet + Reaction Center Weighting)
+### Reaction Encoder (SchNet + Reaction Center Weighting)
 
-**Input**: Atom types, 3D coordinates, atom features (formal charge, valence, etc.), reaction center weights 
+**Input**: substrate and product atom information - atom types, 3D coordinates, atom features (formal charge, valence, etc.), reaction center weights 
 **Output**: $f_r$ - Atom-level embeddings capturing the full reaction context
 
 This module captures relationships between substrate and product representations in a reaction, generating a comprehensive reaction representation.
@@ -343,7 +297,7 @@ EnzymeCAGE excels in anticipating the function of unseen enzymes and annotating 
 
 EnzymeCAGE distinguished between enzymes with high sequence similarity but distinct functions. For 1,968 positive enzymes in the test set, ESM2 embeddings and tSNE were used to visualize the embeddings, selecting a cluster of five enzymes with different EC classes, indicating high sequence similarity yet functional diversity.
 
-## Discussion 
+## Discussion
 
 ### Focusing on extraction of the enzyme pocket
 In traditional enzyme function prediction, methods typically encode the entire enzyme, including regions that may be functionally less relevant. This redundant information can make it challenging for models to learn enzyme functions accurately. A key advantage of our approach lies in the focused extraction of the enzyme pocket, focusing on relevant structural information and hypothetical pocket-specific enzyme-reaction interactions.  Furthermore, the AlphaFill-predicted pockets do not rely on ground truth data for catalytic active sites or strictly defined pocket boundaries. As a result, the model’s predictions will exhibit a degree of robustness to minor errors or variations in pocket definitions.
