@@ -1,7 +1,7 @@
 ---
 title: "EnzymeCAGE - Summary"
 type: paper-summary
-updated: "2026-03-24"
+updated: "2026-03-25"
 topics:
   - Enzyme-Substrate-Alignment
 papers:
@@ -12,6 +12,12 @@ related:
 ---
 
 # EnzymeCAGE - summary
+
+## Overview
+
+EnzymeCAGE excels in anticipating the function of unseen enzymes and annotating orphan reactions with the enzymes that catalyze them, demonstrating better retrieval results through a sequence similarity-free retrieval approach that is orthogonal to conventional methods
+
+EnzymeCAGE distinguished between enzymes with high sequence similarity but distinct functions. For 1,968 positive enzymes in the test set, ESM2 embeddings and tSNE were used to visualize the embeddings, selecting a cluster of five enzymes with different EC classes, indicating high sequence similarity yet functional diversity.
 
 ## Terms
 
@@ -67,6 +73,24 @@ For the test set Orphan-194, we first filtered the full dataset to retain only r
 **Loyal 1968**
 For the Loyal-1968 test set, we identified non-promiscuous enzymes that have been reported to catalyze only a single reaction. Using MMseqs2 with a cutoff of 0.4, we retrieved homologous proteins as negative samples. This set was curated to include reactions with: (1) at least one non-promiscuous enzyme as a positive example, (2) each non-promiscuous enzyme having over 10 homologous proteins, and (3) a ratio of homologous to non-promiscuous enzymes of at least 3:1. These criteria ensure functional diversity and exclude positive enzymes present in the training data. The final Loyal-1968 test set consists of 455 reactions with a total of 71,853 enzyme-reaction pairs, covering 1,968 enzymes across 77 unique top-three-level EC numbers.
 
+## Key Algortihms Used
+
+**Core Model Components**
+- GVP
+- SchNet
+- Self-Attention
+- Cross-Attention
+- MLP
+
+**Pretrained Representations**
+- ESM2
+- DRFP
+
+**Preprocessing Tools**
+- AlphaFold
+- AlphaFill
+- RXNMapper
+
 ## Pre-processing
 
 ### Catalytic Pocket Extraction
@@ -96,7 +120,7 @@ To identify reaction center, we employed RXNMapper to generate atom-atom mapping
 ### Protein Pocket Encoder (GVP + Self-Attention)
 
 **Input**: enzyme pocket residues, residue types, residue positions, dihedral angles, orientations, side-chain information, relative positional vectors and RBF-encoded distances.
-**Output**: $f^e$ - a set of contextualized, geometry-aware residue embeddings for the protein, capturing both local 3D structure (via GVP) and global relationships (via self-attention).
+**Output**: $f^e$ - ($f^{enzyme}$) a set of contextualized, geometry-aware residue embeddings for the protein, capturing both local 3D structure (via GVP) and global relationships (via self-attention).
 
   <bp>
   <bp>
@@ -115,10 +139,11 @@ $E_e$ - represents edge features, including relative positional vectors and RBF-
 
 $D_m = \{ d_{ij} \mid i, j \in V \}$ - a residue-level distance map to further refine residue relationships. $d_{ij}$ represents the distance between residues $i$ and $j$.
 
-The multi-head self-attention is applied over the residue-level node embeddings output by the GVP encoder.
+The multi-head self-attention is applied, with the distance map $D_m$ as an attention bias to enhance the model's understanding of relative positional relationships among residues.
+GVP captures local geometric interactions, while self-attention captures global, long-range dependencies
 The resulting output, $f^e$, encodes the local geometric and biochemical information of the catalytic pocket.
 
-#### GVP embeddings
+#### GVP embeddings explanation
 
 For each residue $i$:
 <center>$h_i^{\mathrm{protein}} \in \mathbb{R}^{d}, \quad f^e = \{ h_i^{\mathrm{protein}} \}_{i=1}^{N}$</center> <br>
@@ -138,7 +163,7 @@ Each embedding encodes:
 ### Reaction Encoder (SchNet + Reaction Center Weighting)
 
 **Input**: substrate and product atom information - atom types, 3D coordinates, atom features (formal charge, valence, etc.), reaction center weights 
-**Output**: $f_r$ - Atom-level embeddings capturing the full reaction context
+**Output**: $f^r$ - ($f^{reaction}$) Atom-level embeddings capturing the full reaction context
 
 This module captures relationships between substrate and product representations in a reaction, generating a comprehensive reaction representation.
 It tries to capture dynamic transformations between substrate and product molecules.
@@ -183,6 +208,8 @@ Using the molecular embeddings $f_s$ and $f_p$, and the reacting area weight mat
 <center>$f^r = \text{CrossAttention}(f^s, f^p, W_r)$</center> <br>
 
 $W_r$ - acts as an attention bias, guiding the model to focus effectively on the reaction center. It biases attention toward reaction-relevant atoms.
+
+$f^r$ - Atom-level embeddings capturing the full reaction context.
 
 ### Enzyme-Reaction Interaction Module
 
@@ -233,7 +260,7 @@ Using $W_I$ as a geometric guidance in the cross-attention model to enhance the 
 
 <center>$z = \mathrm{\text{CrossAttention}}(f^e, f^r, W_I)$</center> <br>
 
-$f_e$ and $f_r$ - represent the feature embeddings of the catalytic pocket and the reaction, respectively.
+$f^e$ and $f^ r$ - represent the feature embeddings of the catalytic pocket and the reaction, respectively.
 
 ### Final Prediction Module (Global Integration)
 
@@ -269,33 +296,89 @@ This separates:
 - "where to look" (priors)
 - "how to reason" (neural networks)
 
+## External Test Sets
+
+To evaluate the performance on external test sets, we selected three prominent enzyme families: Cytochromes P450, terpene synthases, and phosphatases.
+For each family, we curated and processed an open-source dataset to ensure high-quality evaluation:
+- Cytochromes P450: utilizing P450Rdb, a manually curated dataset containing over 1,600 reactions involving approximately 600 P450 enzymes from more than 200 species.
+- Terpene synthases: the dataset comprised over 400 relevant reactions and more than 1,100 terpene synthases.
+- Phosphatases: employing a high-throughput screening dataset consisting of 165 reactions, 218 phosphatases, and 35,970 enzyme-reaction pairs. 
+
+Each dataset was subjected to the same preprocessing pipeline as the internal test sets, including data cleaning and the exclusion of reactions with a similarity score exceeding 0.9 to those in the training set.
+
+## Results 
+ 
+### Enzyme Function Prediction
+
+Assesseing EnzymeCAGE’s ability to predict enzyme functions by evauating the model on unseen enzymes.
+Constructed a diverse test set, named ”Loyal-1968”, consisting of seen reactions and 1968 unseen enzymes (were not in the training set).
+- Positive samples include non-promiscuous enzymes (preform on specifc function) with a broad functional range across 77 unique top-three-level EC numbers, spanning 522 species.
+- Negative samples consist of homologous enzymes (have similar sequences) with different functions.
+
+Loyal-1968 represents a real-world application scenario for enzyme function prediction, where an enzyme with unknown function may exhibit high sequence similarity to annotated enzymes but have different functional capabilities.
+
+The results were compared to two similarity-based approaches, Selenzyme and BLASTp, and to two deep-learning based methods: ESP and CLEAN.
+
+Four evaluation metrics were used to assess retrieval performance:
+- Area under the curve (AUC)
+- Top-10 Discounted Cumulative Gain (DCG)
+- Top-k Success Rate (SR)
+- Enrichment Factor (EF)
+
+For Top-k SR, EnzymeCAGE achieved a 33.7% Top-1 accuracy and a 63.2% Top-10 accuracy for function prediction.
+EnzymeCAGE outperformed all baselines on binary classification AUC ,EF ,Top-k SR.
+When evaluated by EC class, EnzymeCAGE demonstrated better performance across four out of six EC classes (EC-2, EC-3, EC-5, EC-6) with higher EF scores.
+
+---
+
+EnzymeCAGE also excelled in specific case studies of enzyme function prediction:
+
+In the first case, EnzymeCAGE successfully identified an unseen enzyme-reaction pair, ranking the correct enzyme (UniProt: Q9A9Z2) in the 4th position among 450 candidates, despite substantial structural divergence from the most similar enzyme (UniProt: Q97VG1) in the training set. 
+This highlights EnzymeCAGE’s robustness in recognizing functional relevance in structurally diverse enzymes
+
+In the second case, EnzymeCAGE distinguished between enzymes with high sequence similarity but distinct functions. For 1,968 positive enzymes in the test set, ESM2 embeddings and tSNE were used to visualize the embeddings, selecting a cluster of five enzymes with different EC classes, indicating high sequence similarity yet functional diversity. EnzymeCAGE successfully retrieved all five enzymes in top positions within their candidate lists, emphasizing its capacity to discern functionally distinct enzymes despite sequence similarity.
+
+---
+
+Beyond function prediction for unseen enzyme-reaction pairs, EnzymeCAGE can pinpoint catalytic regions for unseen enzymes — a capability that is neither a direct training objective nor derived from annotated training data. To validate this, we first gathered enzymes from the Catalytic Site Atlas, a database containing experimen218 tally validated annotations of catalytic pockets. During predictions for these enzymes, we extracted attention weights from the enzyme-reaction interaction module. Each entry in the attention matrix reflects residue-atom interactions between enzyme residues and substrate atoms. We then focused on columns related to the substrate’s reaction center, computed per-residue mean values, and normalized the resulting weight vector. This allowed us to assess if these residues were part of the true catalytic pockets. EnzymeCAGE successfully highlighted catalytic regions across various enzymes, as validated against known annotations.
+
+### Reaction De-orphaning
+
+Here, EnzymeCAGE aims to identify and retrieve suitable candidate enzymes from a database for a given orphan reaction.
+We constructed the test set, named “Orphan-194”, comprising 194 orphan reactions.
+An “orphan reaction” refers to a reaction for which no catalyzing enzyme was recorded in databases before 2018 but was later annotated with enzymes after 2023.
+
+EnzymeCAGE was benchmarked against several leading methods, including the similarity-based tool Selenzyme and two deep learning-based methods: ESP and CLIPZyme.
+
+For selecting candidate enzymes, we computed the similarity between the target orphan reaction and all reactions in the training set, selecting the top 10 most similar reactions. The enzymes associated with these reactions, all discovered before 2018, were then used as candidates for the target orphan reaction when performing the retrieval task.
+
+Experimental results demonstrated that EnzymeCAGE can accurately retrieve enzymes for orphan reactions.
+
+![](images/1774475719405.png)
+
 ## Fine-tuning
 
 Through simple fine-tuning, EnzymeCAGE can quickly adapt to family-specific tasks, improving its predictive accuracy within specific enzyme families.
 To illustrate its practical utility, we present a case study involving glutarate synthesis, where EnzymeCAGE accurately reconstructs a natural product pathway and significantly outperforms current state-of-the-arts methods
 
-## Evaluation
+For a domain-specific fine-tuning process, we began by constructing a com546 prehensive fine-tuning dataset for the target enzyme family.
+This involved identifying all enzymes and their associated reactions within the family from the training data and generating all possible enzyme-reaction pairs.
+Pairs already present in the original training data retained their original labels, while newly generated pairs were assigned as negative samples.
+This approach yielded training sets containing between 160,000 and 280,000 enzyme-reaction pairs for fine-tuning.
 
-- EnzymeCAGE was bench marked against state-of-the-art enzyme function prediction methods, including two similarity-based approaches, Selenzyme and BLASTp
-- Two deep learning-based methods: ESP, CLEAN
-- Four evaluation metrics were used to assess retrieval performance:  
-   - Area under the curve (AUC)
-   - Top-10 Discounted Cumulative Gain (DCG)
-   - Top-k Success Rate (SR)
-   - Enrichment Factor (EF)
+Subsequently, we utilized the pre-trained model from the evaluation scenario associated with the Loyal-1968 test set as the base model and performed fine-tuning for a fixed number of five epochs for each enzyme family scenario.
 
-### Enzyme Function Prediction
+## Reaction Similarity Measure
 
-### Pinpoint catalytic regions for unseen enzymes
+Our approach for computing reaction similarity primarily referred to the method used in Selenzyme. The similarity between two reactions is computed by comparing their reactants and products using molecular fingerprints and the Tanimoto coefficient. Each molecule in a reaction is represented by a Morgan fingerprint with a radius of 8. The similarity between two molecular fingerprints $A$ and $B$ is quantified using the Tanimoto coefficient. For two reactions $R_1$ and $R_2$, we calculate two similarity scores: direct matching ($S_1$) and cross matching ($S_2$). $S_1$ compares reactants with reactants and products with products:
 
+<center>$S_1 = \sqrt{\frac{\mathrm{sim}(R_1, R_2)^2 + \mathrm{sim}(P_1, P_2)^2}{2}}$</center> <br>
 
-### Reaction De-orphaning
+Where $R$ represents the reactants and $P$ represents the products. $S_2$ compares reactants with products and vice versa:
 
-## Results
+<center>$S_2 = \sqrt{\frac{\mathrm{sim}(R_1, P_2)^2 + \mathrm{sim}(P_1, R_2)^2}{2}}$</center> <br>
 
-EnzymeCAGE excels in anticipating the function of unseen enzymes and annotating orphan reactions with the enzymes that catalyze them, demonstrating better retrieval results through a sequence similarity-free retrieval approach that is orthogonal to conventional methods
-
-EnzymeCAGE distinguished between enzymes with high sequence similarity but distinct functions. For 1,968 positive enzymes in the test set, ESM2 embeddings and tSNE were used to visualize the embeddings, selecting a cluster of five enzymes with different EC classes, indicating high sequence similarity yet functional diversity.
+The final similarity score for the reaction pair is the maximum of $S_1$ and $S_2$. This approach ensures comprehensive comparisons between reactions, accounting for both direct and cross-reactivity relationships.
 
 ## Discussion
 
@@ -312,6 +395,11 @@ For reaction encoding, we calculate a reacting area weight matrix as a form of g
 Although EnzymeCAGE primarily focuses on enzyme retrieval and function prediction by predicting enzyme-reaction interactions, the model also provides interpretability in its predictions. When using the geometric cross373 attention model to learn the interaction between enzyme and reaction, we extract attention weights and use them to identify active sites. In many enzymes, this method accurately predicts the location of active sites. However, a current limitation is that we can only identify active sites located within the enzyme pocket as estimated by AlphaFill, while in reality, some active sites may lie outside the pocket but are involved in catalysis
 
 ## My Comments and Questions
+
+### Question - de-orphan 
+
+Why they are not evaluating all enzymes, and just the ones which are accosiated with the 10 closest reactions?
+
 
 ### Why not using GVP to represent substrates and products
 
